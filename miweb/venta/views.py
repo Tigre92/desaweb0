@@ -15,7 +15,7 @@ def consulta_clientes(request):
         'mensaje'  : 'Hola'
     }
     # Se devolverá el enlace entre la plantilla y el contexto
-    return render(request, 'venta\lista_clientes.html', context)
+    return render(request, r'venta\lista_clientes.html', context)
 
 from .forms import ClienteCreateForm, ClienteUpdateForm
 from django.contrib import messages
@@ -99,4 +99,78 @@ def actualizar_cliente(request):
     }
     return render(request,'venta/u_cliente.html', context)
                      
-
+# Eliminar clientes
+def borrar_cliente(request):
+    clientes_encontrados = []
+    tipo_busqueda = 'dni'  # Por defecto búsqueda por DNI
+    termino_busqueda = ''
+    total_registros = 0
+    
+    if request.method == 'POST':
+        if 'consultar' in request.POST:
+            # Realizar búsqueda
+            tipo_busqueda = request.POST.get('tipo_busqueda', 'dni')
+            termino_busqueda = request.POST.get('termino_busqueda', '').strip()
+            
+            if termino_busqueda:
+                if tipo_busqueda == 'dni':
+                    # Búsqueda exacta por DNI
+                    try:
+                        cliente = Cliente.objects.get(id_cliente=termino_busqueda)
+                        clientes_encontrados = [cliente]
+                    except Cliente.DoesNotExist:
+                        messages.error(request, 'No se encontró cliente con ese DNI')
+                        
+                elif tipo_busqueda == 'nombre':
+                    # Búsqueda por coincidencia en apellidos y nombres
+                    clientes_encontrados = Cliente.objects.filter(
+                        ape_nom__icontains=termino_busqueda
+                    ).order_by('id_cliente')
+                    
+                    if not clientes_encontrados:
+                        messages.error(request, 'No se encontraron clientes con ese nombre')
+                
+                total_registros = len(clientes_encontrados)
+                
+                if total_registros > 0:
+                    messages.success(request, f'Se encontraron {total_registros} registro(s)')
+            else:
+                messages.error(request, 'Por favor ingrese un término de búsqueda')
+                
+        elif 'eliminar' in request.POST:
+            # Eliminar cliente específico
+            dni_eliminar = request.POST.get('dni_eliminar')
+            
+            if dni_eliminar:
+                try:
+                    cliente = Cliente.objects.get(id_cliente=dni_eliminar)
+                    cliente.delete()
+                    messages.success(request, f'Cliente con DNI {dni_eliminar} eliminado correctamente')
+                    
+                    # Volver a hacer la búsqueda para actualizar la lista
+                    tipo_busqueda = request.POST.get('tipo_busqueda_actual', 'dni')
+                    termino_busqueda = request.POST.get('termino_busqueda_actual', '')
+                    
+                    if termino_busqueda:
+                        if tipo_busqueda == 'dni':
+                            # Para DNI, no mostrar nada ya que se eliminó
+                            clientes_encontrados = []
+                        elif tipo_busqueda == 'nombre':
+                            # Actualizar lista por nombre
+                            clientes_encontrados = Cliente.objects.filter(
+                                ape_nom__icontains=termino_busqueda
+                            ).order_by('id_cliente')
+                        
+                        total_registros = len(clientes_encontrados)
+                        
+                except Cliente.DoesNotExist:
+                    messages.error(request, 'Cliente no encontrado')
+    
+    context = {
+        'clientes_encontrados': clientes_encontrados,
+        'tipo_busqueda': tipo_busqueda,
+        'termino_busqueda': termino_busqueda,
+        'total_registros': total_registros
+    }
+    
+    return render(request, 'venta/borrar_cliente.html', context)
